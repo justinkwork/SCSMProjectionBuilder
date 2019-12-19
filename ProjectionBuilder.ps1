@@ -40,6 +40,7 @@ $form = @"
                     <TextBox ToolTip="Version should be in the form 7.0.5.0" Name="txtMPVersion" HorizontalAlignment="Left" Height="23" Margin="163,122,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="181"/>
                     <Label Content="Management Pack Version:" HorizontalAlignment="Left" Margin="12,122,0,0" VerticalAlignment="Top"/>
                     <DataGrid Name="grdSelectedRels" HorizontalAlignment="Left" Height="100" Margin="113,386,0,0" VerticalAlignment="Top" Width="409" CanUserAddRows="False"/>
+                    <Button Name="btnRelsCustomize" Content="Customize" HorizontalAlignment="Left" Margin="25,443,0,0" VerticalAlignment="Top" Width="75"/>
                 </Grid>
             </TabItem>
 
@@ -65,20 +66,38 @@ $classForm = @"
 </Window>
 "@
 
+$compAddForm = @"
+<Window 
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        Title="Select a Relationship" Height="258.37" Width="376.631">
+    <Grid Background="#FFE5E5E5">
+        <Button Name="btnComponentSelect" Content="Select" HorizontalAlignment="Left" Margin="129,170,0,0" VerticalAlignment="Top" Width="110" Height="25"/>
+        <DataGrid Name="grdComponentAdd" HorizontalAlignment="Left" Height="126" Margin="23,21,0,0" VerticalAlignment="Top" Width="329" CanUserAddRows="False"/>
+    </Grid>
+</Window>
+"@
+
 $relForm = @"
 <Window 
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        Title="Relationship" MaxHeight="615" MaxWidth="739" Height="231.133" Width="523.2" Background="#FFE5E5E5" >
+        Title="Relationship" MaxHeight="615" MaxWidth="739" Height="261.133" Width="622.8" Background="#FFE5E5E5" >
     <Grid>
         <TextBox Name="txtRelName" HorizontalAlignment="Left" Height="23" Margin="136,35,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="267" IsEnabled="False" />
         <Label Content="Relationship Name:" HorizontalAlignment="Left" Margin="17,32,0,0" VerticalAlignment="Top" Width="114"/>
         <TextBox Name="txtRelAlias" HorizontalAlignment="Left" Height="23" Margin="136,66,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="267"/>
         <Label Content="Relationship Alias:" HorizontalAlignment="Left" Margin="17,63,0,0" VerticalAlignment="Top" Width="114"/>
-        <CheckBox Name="chkRelTarget" Content="Target" HorizontalAlignment="Left" Margin="418,43,0,0" VerticalAlignment="Top"/>
-        <Button Name="btnAddRelationshipC" Content="Add" HorizontalAlignment="Left" Margin="206,122,0,0" VerticalAlignment="Top" Width="110" Height="43"/>
+        <Button Name="btnAddRelationshipC" Content="OK" HorizontalAlignment="Left" Margin="486,169,0,0" VerticalAlignment="Top" Width="110" Height="43"/>
+        <DataGrid Name="grdRelNest" HorizontalAlignment="Left" Height="89" Margin="136,123,0,0" VerticalAlignment="Top" Width="334" CanUserAddRows="False"/>
+        <Label Content="Nested Components:" HorizontalAlignment="Left" Margin="17,88,0,0" VerticalAlignment="Top" Width="128"/>
+        <Button Name="btnRelFormAdd" Content="Add" HorizontalAlignment="Left" Margin="56,135,0,0" VerticalAlignment="Top" Width="75"/>
+        <Button Name="btnRelFormRemove" Content="Remove" HorizontalAlignment="Left" Margin="56,159,0,0" VerticalAlignment="Top" Width="75"/>
+        <Button Name="btnRelFormCustomize" Content="Customize" HorizontalAlignment="Left" Margin="56,192,0,0" VerticalAlignment="Top" Width="75"/>
 
     </Grid>
 </Window>
@@ -445,10 +464,12 @@ $btnSaveBrowse.add_click({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
 
+
 $btnClassBrowse.add_click({
     Get-TargetClasses -control $txtClass
    $grdSelectedRels.ItemsSource = @()
 })
+
 
 $chkSeal.add_click({
     $txtCompany.IsEnabled = $chkSeal.IsChecked
@@ -461,6 +482,7 @@ $chkSeal.add_click({
 $txtCompany.add_keyup({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
+
 
 $btnRelsAdd.add_click({
     $source = New-Object System.Collections.ArrayList
@@ -480,6 +502,47 @@ $btnRelsRemove.add_click({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
 
+$btnRelsCustomize.add_click({
+    $RelCustom = Load-Dialog -XamlPath $relForm
+    $txtRelName.Text = $grdSelectedRels.SelectedItem.Name
+    $relationship = Get-SCSMRelationshipClass -Name $txtRelName.Text
+    $btnAddRelationshipC.add_click({
+        $source = New-Object System.Collections.ArrayList
+        if ($grdSelectedRels.ItemsSource) {
+            $source.AddRange($grdSelectedRels.ItemsSource)
+        }
+        $thisItem = [pscustomobject]@{
+            DisplayName = $grdSelectedRels.SelectedItem.DisplayName
+            Name = $grdSelectedRels.SelectedItem.Name
+            Source = $grdSelectedRels.SelectedItem.Source
+            Target = $grdSelectedRels.SelectedItem.Target 
+            Alias = $txtRelAlias.Text
+        }
+        $source.Remove($grdSelectedRels.SelectedItem)
+        $source.Add($thisItem)
+        $grdSelectedRels.ItemsSource = $source
+
+    })
+    $btnRelFormAdd.add_click({
+        $potentialNest = $relationship.Target.Class.GetRelationshipsWhereSource() | select displayname, name, target, source
+        $compAddWin = Load-Dialog -XamlPath $compAddForm
+            $grdComponentAdd.itemssource = $potentialNest 
+            $btnComponentSelect.add_click({
+                $source = New-Object System.Collections.ArrayList
+                if ($grdRelNest.ItemsSource) {
+                    $source.AddRange($grdRelNest.ItemsSource)
+                }
+                $source.Add($grdComponentAdd.SelectedItem)
+                $grdRelNest.ItemsSource = $source
+                #$grdRelNest.Items.add($grdComponentAdd.SelectedItem.Name)
+               
+            })
+        $compAddWin.showdialog()
+    })
+    
+    $RelCustom.showdialog()
+})
+
 $txtSavePath.add_TextChanged({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
@@ -487,6 +550,7 @@ $txtSavePath.add_TextChanged({
 $txtProjectionName.add_TextChanged({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
+
 
 $txtComputer.add_LostFocus({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
@@ -499,6 +563,7 @@ $btnKeyBrowse.add_click({
 $txtMPVersion.add_textchanged({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
+
 
 $btnBuild.add_click({
     $selectedrelationships = @()
