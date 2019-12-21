@@ -10,7 +10,6 @@ $form = @"
         <TabControl HorizontalAlignment="Left" Height="575"  Margin="0,10,0,-0.2" VerticalAlignment="Top" Width="724" Background="#FFE5E5E5">
             <TabItem Header="Type Projection">
                 <Grid Background="#FFE5E5E5" Name="grdddd">
-                    <TextBox Name="txtProjectionName" HorizontalAlignment="Left" Height="23" Margin="163,12,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="181"/>
                     <TextBox Name="txtMPName" HorizontalAlignment="Left" Height="23" Margin="163,86,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="181"/>
                     <TextBox Name="txtSavePath" HorizontalAlignment="Left" Height="23" Margin="413,12,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="213" IsEnabled="False"/>
                     <TextBox Name="txtKeyPath" HorizontalAlignment="Left" Height="23" Margin="413,48,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="213" IsEnabled="False"/>
@@ -35,7 +34,8 @@ $form = @"
                     <TextBox Name="txtComputer" HorizontalAlignment="Left" Height="23" Margin="413,122,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="213" IsEnabled="False"/>
                     <Label Name="lblComputer" Content="Computer:" HorizontalAlignment="Left" Margin="344,122,0,0" VerticalAlignment="Top" Visibility="Visible"/>
                     <Label Content="Selected:" HorizontalAlignment="Left" Margin="42,386,0,0" VerticalAlignment="Top"/>
-                    <TextBox Name="txtProjDisplay" HorizontalAlignment="Left" Height="23" Margin="163,50,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="181"/>
+                    <TextBox Name="txtProjDisplay" HorizontalAlignment="Left" Height="23" Margin="163,50,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="181"/>
+                    <TextBox Name="txtProjectionName" IsEnabled="false" HorizontalAlignment="Left" Height="23" Margin="163,12,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="181"/>
                     <Label Content="Projection DisplayName:" HorizontalAlignment="Left" Margin="12,50,0,0" VerticalAlignment="Top"/>
                     <TextBox ToolTip="Version should be in the form 7.0.5.0" Name="txtMPVersion" HorizontalAlignment="Left" Height="23" Margin="163,122,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="181"/>
                     <Label Content="Management Pack Version:" HorizontalAlignment="Left" Margin="12,122,0,0" VerticalAlignment="Top"/>
@@ -433,6 +433,10 @@ Function Check-Version {
 #endregion
 
 $win = Load-Dialog $Form
+
+$txtProjDisplay.Add_TextChanged({
+    $txtProjectionName.Text = $txtProjDisplay.Text.Replace(" ",".")
+})
 
 $chkImport.add_click({
     $txtComputer.IsEnabled = $chkImport.IsChecked
