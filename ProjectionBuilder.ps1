@@ -41,6 +41,8 @@ $form = @"
                     <Label Content="Management Pack Version:" HorizontalAlignment="Left" Margin="12,122,0,0" VerticalAlignment="Top"/>
                     <DataGrid Name="grdSelectedRels" HorizontalAlignment="Left" Height="100" Margin="113,386,0,0" VerticalAlignment="Top" Width="409" CanUserAddRows="False"/>
                     <Button Name="btnRelsCustomize" Content="Customize" HorizontalAlignment="Left" Margin="25,443,0,0" VerticalAlignment="Top" Width="75"/>
+                    <Label Content="Filter:" HorizontalAlignment="Left" Margin="371,171,0,0" VerticalAlignment="Top"/>
+                    <TextBox Name="txtRelFilter" HorizontalAlignment="Left" Height="23" Margin="414,171,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="120"/>
                 </Grid>
             </TabItem>
 
@@ -300,6 +302,21 @@ Function New-SCSMTypeProjection {
 
 }
 
+Function Get-ClassRelationships {
+    param([parameter(mandatory=$true)]$class) 
+    $relationships = New-Object System.Collections.ArrayList
+    $relationships.AddRange($class.GetRelationships())
+    $baseTypes = $class.GetBaseTypes()
+    foreach ($bt in $baseTypes) {
+        if ($bt.Name -ne 'System.Entity') {
+            $relationships.AddRange($bt.GetRelationships())
+        }
+    }
+    $relationships = $relationships | ?{$_.displayname -ne $null} | select displayname, source,target,name
+
+    return $relationships
+}
+
 Function Get-TargetClasses {
     param($control)
     $classWin = Load-Dialog $classForm
@@ -339,16 +356,8 @@ Function Get-TargetClasses {
             $class = Get-SCSMClass -Name $grdClass.SelectedItem
         }
         $mp = $class.GetManagementPack()
-        $relationships = New-Object System.Collections.ArrayList
-        $relationships.AddRange($class.GetRelationships())
-        $baseTypes = $class.GetBaseTypes()
-        foreach ($bt in $baseTypes) {
-            if ($bt.Name -ne 'System.Entity') {
-                $relationships.AddRange($bt.GetRelationships())
-            }
-        }
-        $relationships = $relationships | ?{$_.displayname -ne $null} | select displayname, source,target,name
-        $grdRels.ItemsSource = $relationships
+        
+        $grdRels.ItemsSource = Get-ClassRelationships -class $class
         ###
 
 
@@ -357,6 +366,7 @@ Function Get-TargetClasses {
     })
     $classWin.showdialog() | Out-Null
 }
+
 
 Function Get-Folder($initialDirectory)
 
@@ -483,6 +493,23 @@ $txtCompany.add_keyup({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
 
+$txtRelfilter.add_keyup({
+    if ($txtRelfilter.text -ne "") {
+        $grdSource = $grdRels.Items | ?{$_.DisplayName -like ("*" + $txtRelfilter.text + "*")}
+        if ($grdSource.Count -gt 1) {
+            $grdRels.ItemsSource = $grdSource
+        }
+        else {
+            $uniSource = @($grdSource)
+            $grdRels.ItemsSource = $uniSource
+                
+        }
+    }
+    else {
+        $class = Get-SCSMClass -Name $txtClass.Text
+        $grdRels.ItemsSource = Get-ClassRelationships -class $class
+    }
+})
 
 $btnRelsAdd.add_click({
     $source = New-Object System.Collections.ArrayList
