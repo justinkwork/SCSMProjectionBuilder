@@ -41,7 +41,7 @@ $form = @"
                     <Label Content="Management Pack Version:" HorizontalAlignment="Left" Margin="12,122,0,0" VerticalAlignment="Top"/>
                     <DataGrid Name="grdSelectedRels" HorizontalAlignment="Left" Height="100" Margin="113,386,0,0" VerticalAlignment="Top" Width="409" CanUserAddRows="False"/>
                     <Label Content="Filter:" HorizontalAlignment="Left" Margin="371,171,0,0" VerticalAlignment="Top"/>
-                    <TextBox Name="txtRelFilter" HorizontalAlignment="Left" Height="23" Margin="414,171,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="120"/>
+                    <TextBox Name="txtRelFilter" HorizontalAlignment="Left" Height="23" Margin="414,171,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="120" IsEnabled="false"/>
                 </Grid>
             </TabItem>
 
@@ -465,6 +465,7 @@ $btnSaveBrowse.add_click({
 $btnClassBrowse.add_click({
     Get-TargetClasses -control $txtClass
    $grdSelectedRels.ItemsSource = @()
+   $txtRelfilter.IsEnabled = $true
 })
 
 $chkSeal.add_click({
@@ -498,20 +499,27 @@ $btnRelsRemove.add_click({
 })
 
 $txtRelfilter.add_keyup({
-    if ($txtRelfilter.text -ne "") {
-        $grdSource = $grdRels.Items | ?{$_.DisplayName -like ("*" + $txtRelfilter.text + "*")}
-        if ($grdSource.Count -gt 1) {
-            $grdRels.ItemsSource = $grdSource
+    if ($txtClass.Text -ne '') {
+        if ($txtRelfilter.text -ne "") {
+            $grdSource = $grdRels.Items | ?{$_.DisplayName -like ("*" + $txtRelfilter.text + "*")}
+            if ($grdSource.Count -gt 1) {
+                $grdRels.ItemsSource = $grdSource
+            }
+            else {
+                $uniSource = @($grdSource)
+                $grdRels.ItemsSource = $uniSource
+                
+            }
         }
         else {
-            $uniSource = @($grdSource)
-            $grdRels.ItemsSource = $uniSource
-                
+            if ($remoteComputer) {
+                $class = Get-SCSMClass -Name $txtClass.Text -ComputerName $remoteComputer
+            }
+            else {
+                $class = Get-SCSMClass -Name $txtClass.Text
+            }
+            $grdRels.ItemsSource = Get-ClassRelationships -class $class
         }
-    }
-    else {
-        $class = Get-SCSMClass -Name $txtClass.Text
-        $grdRels.ItemsSource = Get-ClassRelationships -class $class
     }
 })
 
@@ -582,6 +590,7 @@ $btnBuild.add_click({
     $grdRels.ItemsSource = @()
     $grdSelectedRels.ItemsSource = @()
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+    $txtRelfilter.IsEnabled = $false
    
 })
 
