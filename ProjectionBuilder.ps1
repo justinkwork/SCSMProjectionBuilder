@@ -484,9 +484,15 @@ $btnRelsAdd.add_click({
     if ($grdSelectedRels.ItemsSource) {
         $source.AddRange($grdSelectedRels.ItemsSource)  
     }
-    $source.Add($grdRels.SelectedItem)
-    $grdSelectedRels.ItemsSource = $source
-    $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+    if (!($source.Contains($grdRels.SelectedItem))) {
+        $source.Add($grdRels.SelectedItem)
+        $grdSelectedRels.ItemsSource = $source
+        $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+    }
+    else {
+        [System.Windows.MessageBox]::show($grdRels.SelectedItem.DisplayName + " has already been selected")
+    }
+    
 })
 
 $btnRelsRemove.add_click({
