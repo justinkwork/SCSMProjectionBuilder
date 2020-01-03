@@ -338,7 +338,13 @@ Function Get-TargetClasses {
         }
         $mp = $class.GetManagementPack()
         $relationships = New-Object System.Collections.ArrayList
-        $relationships.AddRange($class.GetRelationships())
+        $classRels = $class.GetRelationships()
+        if ($classRels.count -lt 2) {
+            $relationships.AddRange(@($classRels))
+        }
+        else {
+            $relationships.AddRange($classRels)
+        }
         $baseTypes = $class.GetBaseTypes()
         foreach ($bt in $baseTypes) {
             if ($bt.Name -ne 'System.Entity') {
