@@ -40,7 +40,6 @@ $form = @"
                     <TextBox ToolTip="Version should be in the form 7.0.5.0" Name="txtMPVersion" HorizontalAlignment="Left" Height="23" Margin="163,122,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="181"/>
                     <Label Content="Management Pack Version:" HorizontalAlignment="Left" Margin="12,122,0,0" VerticalAlignment="Top"/>
                     <DataGrid Name="grdSelectedRels" HorizontalAlignment="Left" Height="100" Margin="113,386,0,0" VerticalAlignment="Top" Width="409" CanUserAddRows="False"/>
-                    <Button Name="btnRelsCustomize" Content="Customize" HorizontalAlignment="Left" Margin="25,443,0,0" VerticalAlignment="Top" Width="75"/>
                     <Label Content="Filter:" HorizontalAlignment="Left" Margin="371,171,0,0" VerticalAlignment="Top"/>
                     <TextBox Name="txtRelFilter" HorizontalAlignment="Left" Height="23" Margin="414,171,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="120"/>
                 </Grid>
@@ -529,46 +528,6 @@ $btnRelsRemove.add_click({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
 
-$btnRelsCustomize.add_click({
-    $RelCustom = Load-Dialog -XamlPath $relForm
-    $txtRelName.Text = $grdSelectedRels.SelectedItem.Name
-    $relationship = Get-SCSMRelationshipClass -Name $txtRelName.Text
-    $btnAddRelationshipC.add_click({
-        $source = New-Object System.Collections.ArrayList
-        if ($grdSelectedRels.ItemsSource) {
-            $source.AddRange($grdSelectedRels.ItemsSource)
-        }
-        $thisItem = [pscustomobject]@{
-            DisplayName = $grdSelectedRels.SelectedItem.DisplayName
-            Name = $grdSelectedRels.SelectedItem.Name
-            Source = $grdSelectedRels.SelectedItem.Source
-            Target = $grdSelectedRels.SelectedItem.Target 
-            Alias = $txtRelAlias.Text
-        }
-        $source.Remove($grdSelectedRels.SelectedItem)
-        $source.Add($thisItem)
-        $grdSelectedRels.ItemsSource = $source
-
-    })
-    $btnRelFormAdd.add_click({
-        $potentialNest = $relationship.Target.Class.GetRelationshipsWhereSource() | select displayname, name, target, source
-        $compAddWin = Load-Dialog -XamlPath $compAddForm
-            $grdComponentAdd.itemssource = $potentialNest 
-            $btnComponentSelect.add_click({
-                $source = New-Object System.Collections.ArrayList
-                if ($grdRelNest.ItemsSource) {
-                    $source.AddRange($grdRelNest.ItemsSource)
-                }
-                $source.Add($grdComponentAdd.SelectedItem)
-                $grdRelNest.ItemsSource = $source
-                #$grdRelNest.Items.add($grdComponentAdd.SelectedItem.Name)
-               
-            })
-        $compAddWin.showdialog()
-    })
-    
-    $RelCustom.showdialog()
-})
 
 $txtSavePath.add_TextChanged({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
