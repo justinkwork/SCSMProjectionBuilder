@@ -487,27 +487,31 @@ $txtCompany.add_keyup({
 })
 
 $btnRelsAdd.add_click({
-    $source = New-Object System.Collections.ArrayList
-    if ($grdSelectedRels.ItemsSource) {
-        $source.AddRange($grdSelectedRels.ItemsSource)  
-    }
-    if (!($source.Contains($grdRels.SelectedItem))) {
-        $source.Add($grdRels.SelectedItem)
-        $grdSelectedRels.ItemsSource = $source
-        $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
-    }
-    else {
-        [System.Windows.MessageBox]::show($grdRels.SelectedItem.DisplayName + " has already been selected")
+    if ($grdRels.SelectedItem) {
+        $source = New-Object System.Collections.ArrayList
+        if ($grdSelectedRels.ItemsSource) {
+            $source.AddRange($grdSelectedRels.ItemsSource)  
+        }
+        if (!($source.Contains($grdRels.SelectedItem))) {
+            $source.Add($grdRels.SelectedItem)
+            $grdSelectedRels.ItemsSource = $source
+            $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+        }
+        else {
+            [System.Windows.MessageBox]::show($grdRels.SelectedItem.DisplayName + " has already been selected")
+        }
     }
     
 })
 
 $btnRelsRemove.add_click({
-    $gridItemsSource = New-Object System.Collections.ArrayList
-    $gridItemsSource.AddRange($grdSelectedRels.ItemsSource)
-    $gridItemsSource.Remove($grdSelectedRels.SelectedItem)
-    $grdSelectedRels.ItemsSource = $gridItemsSource
-    $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+    if ($grdSelectedRels.ItemsSource) {
+        $gridItemsSource = New-Object System.Collections.ArrayList
+        $gridItemsSource.AddRange($grdSelectedRels.ItemsSource)
+        $gridItemsSource.Remove($grdSelectedRels.SelectedItem)
+        $grdSelectedRels.ItemsSource = $gridItemsSource
+        $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+    }
 })
 
 $txtRelfilter.add_keyup({
