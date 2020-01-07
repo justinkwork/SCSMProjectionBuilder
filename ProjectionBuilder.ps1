@@ -42,6 +42,8 @@ $form = @"
                     <DataGrid Name="grdSelectedRels" HorizontalAlignment="Left" Height="100" Margin="113,386,0,0" VerticalAlignment="Top" Width="409" CanUserAddRows="False"/>
                     <Label Content="Filter:" HorizontalAlignment="Left" Margin="371,171,0,0" VerticalAlignment="Top"/>
                     <TextBox Name="txtRelFilter" HorizontalAlignment="Left" Height="23" Margin="414,171,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="120" IsEnabled="false"/>
+                    <Button Name="btnRelsCustomize" Content="Customize" HorizontalAlignment="Left" Margin="25,443,0,0" VerticalAlignment="Top" Width="75"/>
+
                 </Grid>
             </TabItem>
 
@@ -67,20 +69,38 @@ $classForm = @"
 </Window>
 "@
 
+$compAddForm = @"
+<Window 
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        Title="Select a Relationship" Height="258.37" Width="376.631">
+    <Grid Background="#FFE5E5E5">
+        <Button Name="btnComponentSelect" Content="Select" HorizontalAlignment="Left" Margin="129,170,0,0" VerticalAlignment="Top" Width="110" Height="25"/>
+        <DataGrid Name="grdComponentAdd" HorizontalAlignment="Left" Height="126" Margin="23,21,0,0" VerticalAlignment="Top" Width="329" CanUserAddRows="False"/>
+    </Grid>
+</Window>
+"@
+
 $relForm = @"
 <Window 
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        Title="Relationship" MaxHeight="615" MaxWidth="739" Height="231.133" Width="523.2" Background="#FFE5E5E5" >
+        Title="Relationship" MaxHeight="615" MaxWidth="739" Height="261.133" Width="622.8" Background="#FFE5E5E5" >
     <Grid>
         <TextBox Name="txtRelName" HorizontalAlignment="Left" Height="23" Margin="136,35,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="267" IsEnabled="False" />
         <Label Content="Relationship Name:" HorizontalAlignment="Left" Margin="17,32,0,0" VerticalAlignment="Top" Width="114"/>
         <TextBox Name="txtRelAlias" HorizontalAlignment="Left" Height="23" Margin="136,66,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="267"/>
         <Label Content="Relationship Alias:" HorizontalAlignment="Left" Margin="17,63,0,0" VerticalAlignment="Top" Width="114"/>
-        <CheckBox Name="chkRelTarget" Content="Target" HorizontalAlignment="Left" Margin="418,43,0,0" VerticalAlignment="Top"/>
-        <Button Name="btnAddRelationshipC" Content="Add" HorizontalAlignment="Left" Margin="206,122,0,0" VerticalAlignment="Top" Width="110" Height="43"/>
+        <Button Name="btnAddRelationshipC" Content="OK" HorizontalAlignment="Left" Margin="486,169,0,0" VerticalAlignment="Top" Width="110" Height="43"/>
+        <DataGrid Name="grdRelNest" HorizontalAlignment="Left" Height="89" Margin="136,123,0,0" VerticalAlignment="Top" Width="334" CanUserAddRows="False"/>
+        <Label Content="Nested Components:" HorizontalAlignment="Left" Margin="17,88,0,0" VerticalAlignment="Top" Width="128"/>
+        <Button Name="btnRelFormAdd" Content="Add" HorizontalAlignment="Left" Margin="56,135,0,0" VerticalAlignment="Top" Width="75"/>
+        <Button Name="btnRelFormRemove" Content="Remove" HorizontalAlignment="Left" Margin="56,159,0,0" VerticalAlignment="Top" Width="75"/>
+        <Button Name="btnRelFormCustomize" Content="Customize" HorizontalAlignment="Left" Margin="56,192,0,0" VerticalAlignment="Top" Width="75"/>
 
     </Grid>
 </Window>
@@ -125,6 +145,32 @@ Function Load-Dialog {
     return $xamGUI
 }
 
+Function New-TPComponent {
+    param(
+        $Document,
+        $Parent,
+        $Class,
+        $Relationship,
+        $Alias 
+    )
+ 
+    $Child = $Document.CreateElement("Component")
+    Write-Host "Building TP for $($Relationship.Displayname)"
+    if (($Class.getbasetypes() -notcontains $Relationship.Source.Class) -and  ($Class -ne $Relationship.source.class)){
+        $Child.SetAttribute("Path", "`$Context/Path[Relationship='" + ($Relationship.GetManagementPack().Name.replace('.','_')) + "!" + $Relationship.Name + "' SeedRole='Target']`$")  
+    }
+    else {
+        $Child.SetAttribute("Path", "`$Context/Path[Relationship='" + ($Relationship.GetManagementPack().Name.replace('.','_')) + "!" + $Relationship.Name + "']`$")
+    }
+    if ($Alias) {
+        $Child.SetAttribute("Alias", $Alias)
+    }
+    else {
+        $Child.SetAttribute("Alias", $Relationship.name.split('.')[$Relationship.name.split('.').Length -1])
+    }
+    return $Child                
+}
+
 Function New-SCSMTypeProjection {
     [cmdletbinding(
         DefaultParameterSetName='Other'
@@ -135,16 +181,60 @@ Function New-SCSMTypeProjection {
     [parameter(mandatory=$false)][string]$MPVersion,
     [parameter(mandatory=$false)][string]$DisplayName,
     [parameter(mandatory=$true)][Microsoft.EnterpriseManagement.Configuration.ManagementPackType]$Type = $(throw "Specify a valid SCSM Class"),
-    [parameter(mandatory=$true)][ValidateScript({
-        if (($_.gettype().Name) -ne 'ManagementPackRelationship'  ) {Throw "$($_) is not a relationship class"} else {$true}
-        })][System.Array]$Relationships,
+    [parameter(mandatory=$true)][System.Array]$Relationships,
     [parameter(mandatory=$true)][String]$savePath,
+    [parameter(mandatory=$false)][System.Array]$NestedComponents,
     [Parameter(ParameterSetName='Seal',Mandatory=$false)][Parameter(ParameterSetName='Both',Mandatory=$false)][switch]$Seal,
     [Parameter(ParameterSetName='Seal',Mandatory=$true)][Parameter(ParameterSetName='Both',Mandatory=$true)][string]$KeyPath,
     [Parameter(ParameterSetName='Seal',Mandatory=$true)][Parameter(ParameterSetName='Both',Mandatory=$true)][string]$CompanyName,
     [Parameter(ParameterSetName='Import',Mandatory=$false)][Parameter(ParameterSetName='Both',Mandatory=$false)][switch]$Import,
     [Parameter(ParameterSetName='Import',Mandatory=$true)][Parameter(ParameterSetName='Both',Mandatory=$true)][string]$ComputerName
     )
+
+
+
+    function Get-Nest {
+        param($nest, $parent) 
+        Write-Host "Get-Nest"
+        Write-Host "Parent: $($parent)"
+        foreach ($c in $nest.Components) {
+            if ($c.Components) {
+                $rel = Get-SCSMRelationshipClass -Name $c.reltarget
+                $subCom = (New-TPComponent -Document $doc -Class $rel.source.class -Relationship $rel)
+                get-nest -nest $c -parent $subCom
+            }
+            else {
+                $rel = Get-SCSMRelationshipClass -name ($c.name + "$")
+                $subCom = (New-TPComponent -Document $doc -Class $rel.Source.Class -Relationship $rel)
+            }
+            $parent.AppendChild($subCom)
+        }
+        
+    }
+
+    function Get-NestReferences {
+        param($nest,$ReferencesToInclude)
+        $newRefs = $ReferencesToInclude
+        foreach ($n in $nest.components) {
+            $rel = Get-SCSMRelationshipClass -Name $n.name
+            $relMP = $rel.GetManagementPack()
+            if (!($newRefs.contains($relMP))) {
+                $newRefs.add($relMP)
+            }
+            foreach ($c in $n.Components) {
+                if ($c.components) {
+                    $newRefs = Get-NestReferences -nest $c -ReferencesToInclude $newRefs
+                }
+                else {
+                    if ($c.Alias) {$relMP = $c.Relationship.GetManagementPack()} else {$relMP = $c.GetManagementPack()}
+                    if (!($newRefs.contains($relMP))) {
+                        $newRefs.add($relMP)
+                    }
+                }
+            }
+        }
+        return $newRefs
+    }
 
     If (!($DisplayName)) {
         $DisplayName = $Name
@@ -164,11 +254,20 @@ Function New-SCSMTypeProjection {
     $ReferencesToInclude.add($TypeMP)
 
     foreach ($relationship in $Relationships) {
-        
-        $relMP = $relationship.GetManagementPack()
+        if ($relationship.Alias) {
+            $relMP = $relationship.relationship.GetManagementPack()
+        }
+        else {
+            $relMP = $relationship.GetManagementPack()
+        }
         if (!($ReferencesToInclude.Contains($relMP))) {
             $ReferencesToInclude.add($relMP)
         }
+        
+    }
+
+    if ($NestedComponents) {
+        $ReferencesToInclude = Get-NestReferences -nest $NestedComponents -ReferencesToInclude $ReferencesToInclude
     }
 
     [xml]$doc = New-Object System.Xml.XmlDocument
@@ -222,15 +321,26 @@ Function New-SCSMTypeProjection {
                     $TypeProjection.setAttribute("Accessibility", "Public")
                     $TypeProjection.setAttribute("Type", $TypeMP.Name.Replace('.','_') + "!" + $Type.Name)
                     foreach ($relationship in $Relationships) {
-
-                        $Component = $doc.CreateElement("Component")
-                        if (($Type.getbasetypes() -notcontains $Relationship.Source.Class) -and  ($type -ne $relationship.source.class)){
-                            $Component.SetAttribute("Path", "`$Context/Path[Relationship='" + ($relationship.GetManagementPack().Name.replace('.','_')) + "!" + $relationship.Name + "' SeedRole='Target']`$")  
+                        if ($Relationship.Alias) {
+                            $component = New-TPComponent -Document $doc -Class $Type -Relationship $Relationship.relationship -Alias $Relationship.Alias
                         }
                         else {
-                         $Component.SetAttribute("Path", "`$Context/Path[Relationship='" + ($relationship.GetManagementPack().Name.replace('.','_')) + "!" + $relationship.Name + "']`$")
+                            $component = New-TPComponent -Document $doc -Class $Type -Relationship $Relationship
                         }
-                        $component.SetAttribute("Alias", $relationship.name.split('.')[$relationship.name.split('.').Length -1])
+                        if ($NestedComponents) {
+                            foreach ($n in $NestedComponents) {
+                                if ($relationship.Alias) {
+                                    $relTarget = $relationship.Relationship
+                                }
+                                else {
+                                    $relTarget = $relationship
+                                }
+                                if ($n.reltarget -eq $relTarget) {
+                                    get-nest -nest $n -parent $component
+                                }
+                            }
+                        }
+
                         $TypeProjection.AppendChild($Component)
                     }
                 $TypeProjections.AppendChild($TypeProjection)
@@ -453,6 +563,77 @@ Function Check-Version {
     }
 }
 
+Function Load-CustomizeForm {
+    param($SelectedRelgrid)
+    $RelCustom = Load-Dialog -XamlPath $relForm
+    $txtRelName.Text = $SelectedRelgrid.SelectedItem.Name
+    $relationship = Get-SCSMRelationshipClass -Name $txtRelName.Text
+
+    #ok button
+    $btnAddRelationshipC.add_click({
+        #get this grdRelNest
+        foreach ($c in $_.Source.Parent.Children) {
+            if ($c.name -eq 'grdRelNest') {
+                $localGrdRelNest = $c
+            }
+
+            if ($c.name -eq 'txtRelAlias') {
+                $localTxtRelAlias = $c
+            }
+        }
+
+        #Set-Variable -Name athing -Value $_ -Scope global
+        $source = New-Object System.Collections.ArrayList
+        if ($SelectedRelgrid.ItemsSource) {
+            $source.AddRange($SelectedRelgrid.ItemsSource)
+        }
+
+        $thisItem = [pscustomobject]@{
+            DisplayName = $SelectedRelgrid.SelectedItem.DisplayName
+            Name = $SelectedRelgrid.SelectedItem.Name
+            Source = $SelectedRelgrid.SelectedItem.Source
+            Target = $SelectedRelgrid.SelectedItem.Target
+            Alias = $localTxtRelAlias.Text
+            Components = $localGrdRelNest.Items 
+        }
+
+        $source.Remove($SelectedRelgrid.SelectedItem)
+        $source.Add($thisItem)
+        $SelectedRelgrid.ItemsSource = $source
+        Set-Variable -Scope global -Name gridthing -Value $_
+        $_.source.parent.parent.Close()
+        
+
+    })
+
+    #add button
+    $btnRelFormAdd.add_click({
+        $potentialNest = $relationship.Target.Class.GetRelationshipsWhereSource() | select displayname, name, target, source
+        $compAddWin = Load-Dialog -XamlPath $compAddForm
+            $grdComponentAdd.itemssource = $potentialNest 
+            $btnComponentSelect.add_click({
+                $source = New-Object System.Collections.ArrayList
+                if ($grdRelNest.ItemsSource) {
+                    $source.AddRange($grdRelNest.ItemsSource)
+                }
+                $source.Add($grdComponentAdd.SelectedItem)
+                $grdRelNest.ItemsSource = $source
+               
+            })
+        $compAddWin.showdialog()
+    })
+
+
+    #customize button
+    $btnRelFormCustomize.add_click({
+        Load-CustomizeForm -SelectedRelgrid $grdRelNest
+    })
+    
+
+    #relForm UI
+    $RelCustom.showdialog()
+}
+
 #endregion
 
 $win = Load-Dialog $Form
@@ -514,6 +695,10 @@ $btnRelsRemove.add_click({
     }
 })
 
+$btnRelsCustomize.add_click({
+    Load-CustomizeForm -SelectedRelgrid $grdSelectedRels
+})
+
 $txtRelfilter.add_keyup({
     if ($txtClass.Text -ne '') {
         if ($txtRelfilter.text -ne "") {
@@ -538,6 +723,10 @@ $txtRelfilter.add_keyup({
         }
     }
 })
+
+
+
+
 
 $txtSavePath.add_TextChanged({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
