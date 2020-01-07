@@ -40,7 +40,10 @@ $form = @"
                     <TextBox ToolTip="Version should be in the form 7.0.5.0" Name="txtMPVersion" HorizontalAlignment="Left" Height="23" Margin="163,122,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="181"/>
                     <Label Content="Management Pack Version:" HorizontalAlignment="Left" Margin="12,122,0,0" VerticalAlignment="Top"/>
                     <DataGrid Name="grdSelectedRels" HorizontalAlignment="Left" Height="100" Margin="113,386,0,0" VerticalAlignment="Top" Width="409" CanUserAddRows="False"/>
+                    <Label Content="Filter:" HorizontalAlignment="Left" Margin="371,171,0,0" VerticalAlignment="Top"/>
+                    <TextBox Name="txtRelFilter" HorizontalAlignment="Left" Height="23" Margin="414,171,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="120" IsEnabled="false"/>
                     <Button Name="btnRelsCustomize" Content="Customize" HorizontalAlignment="Left" Margin="25,443,0,0" VerticalAlignment="Top" Width="75"/>
+
                 </Grid>
             </TabItem>
 
@@ -142,6 +145,32 @@ Function Load-Dialog {
     return $xamGUI
 }
 
+Function New-TPComponent {
+    param(
+        $Document,
+        $Parent,
+        $Class,
+        $Relationship,
+        $Alias 
+    )
+ 
+    $Child = $Document.CreateElement("Component")
+    Write-Host "Building TP for $($Relationship.Displayname)"
+    if (($Class.getbasetypes() -notcontains $Relationship.Source.Class) -and  ($Class -ne $Relationship.source.class)){
+        $Child.SetAttribute("Path", "`$Context/Path[Relationship='" + ($Relationship.GetManagementPack().Name.replace('.','_')) + "!" + $Relationship.Name + "' SeedRole='Target']`$")  
+    }
+    else {
+        $Child.SetAttribute("Path", "`$Context/Path[Relationship='" + ($Relationship.GetManagementPack().Name.replace('.','_')) + "!" + $Relationship.Name + "']`$")
+    }
+    if ($Alias) {
+        $Child.SetAttribute("Alias", $Alias)
+    }
+    else {
+        $Child.SetAttribute("Alias", $Relationship.name.split('.')[$Relationship.name.split('.').Length -1])
+    }
+    return $Child                
+}
+
 Function New-SCSMTypeProjection {
     [cmdletbinding(
         DefaultParameterSetName='Other'
@@ -152,16 +181,60 @@ Function New-SCSMTypeProjection {
     [parameter(mandatory=$false)][string]$MPVersion,
     [parameter(mandatory=$false)][string]$DisplayName,
     [parameter(mandatory=$true)][Microsoft.EnterpriseManagement.Configuration.ManagementPackType]$Type = $(throw "Specify a valid SCSM Class"),
-    [parameter(mandatory=$true)][ValidateScript({
-        if (($_.gettype().Name) -ne 'ManagementPackRelationship'  ) {Throw "$($_) is not a relationship class"} else {$true}
-        })][System.Array]$Relationships,
+    [parameter(mandatory=$true)][System.Array]$Relationships,
     [parameter(mandatory=$true)][String]$savePath,
+    [parameter(mandatory=$false)][System.Array]$NestedComponents,
     [Parameter(ParameterSetName='Seal',Mandatory=$false)][Parameter(ParameterSetName='Both',Mandatory=$false)][switch]$Seal,
     [Parameter(ParameterSetName='Seal',Mandatory=$true)][Parameter(ParameterSetName='Both',Mandatory=$true)][string]$KeyPath,
     [Parameter(ParameterSetName='Seal',Mandatory=$true)][Parameter(ParameterSetName='Both',Mandatory=$true)][string]$CompanyName,
     [Parameter(ParameterSetName='Import',Mandatory=$false)][Parameter(ParameterSetName='Both',Mandatory=$false)][switch]$Import,
     [Parameter(ParameterSetName='Import',Mandatory=$true)][Parameter(ParameterSetName='Both',Mandatory=$true)][string]$ComputerName
     )
+
+
+
+    function Get-Nest {
+        param($nest, $parent) 
+        Write-Host "Get-Nest"
+        Write-Host "Parent: $($parent)"
+        foreach ($c in $nest.Components) {
+            if ($c.Components) {
+                $rel = Get-SCSMRelationshipClass -Name $c.reltarget
+                $subCom = (New-TPComponent -Document $doc -Class $rel.source.class -Relationship $rel)
+                get-nest -nest $c -parent $subCom
+            }
+            else {
+                $rel = Get-SCSMRelationshipClass -name ($c.name + "$")
+                $subCom = (New-TPComponent -Document $doc -Class $rel.Source.Class -Relationship $rel)
+            }
+            $parent.AppendChild($subCom)
+        }
+        
+    }
+
+    function Get-NestReferences {
+        param($nest,$ReferencesToInclude)
+        $newRefs = $ReferencesToInclude
+        foreach ($n in $nest.components) {
+            $rel = Get-SCSMRelationshipClass -Name $n.name
+            $relMP = $rel.GetManagementPack()
+            if (!($newRefs.contains($relMP))) {
+                $newRefs.add($relMP)
+            }
+            foreach ($c in $n.Components) {
+                if ($c.components) {
+                    $newRefs = Get-NestReferences -nest $c -ReferencesToInclude $newRefs
+                }
+                else {
+                    if ($c.Alias) {$relMP = $c.Relationship.GetManagementPack()} else {$relMP = $c.GetManagementPack()}
+                    if (!($newRefs.contains($relMP))) {
+                        $newRefs.add($relMP)
+                    }
+                }
+            }
+        }
+        return $newRefs
+    }
 
     If (!($DisplayName)) {
         $DisplayName = $Name
@@ -181,11 +254,20 @@ Function New-SCSMTypeProjection {
     $ReferencesToInclude.add($TypeMP)
 
     foreach ($relationship in $Relationships) {
-        
-        $relMP = $relationship.GetManagementPack()
+        if ($relationship.Alias) {
+            $relMP = $relationship.relationship.GetManagementPack()
+        }
+        else {
+            $relMP = $relationship.GetManagementPack()
+        }
         if (!($ReferencesToInclude.Contains($relMP))) {
             $ReferencesToInclude.add($relMP)
         }
+        
+    }
+
+    if ($NestedComponents) {
+        $ReferencesToInclude = Get-NestReferences -nest $NestedComponents -ReferencesToInclude $ReferencesToInclude
     }
 
     [xml]$doc = New-Object System.Xml.XmlDocument
@@ -239,15 +321,26 @@ Function New-SCSMTypeProjection {
                     $TypeProjection.setAttribute("Accessibility", "Public")
                     $TypeProjection.setAttribute("Type", $TypeMP.Name.Replace('.','_') + "!" + $Type.Name)
                     foreach ($relationship in $Relationships) {
-
-                        $Component = $doc.CreateElement("Component")
-                        if (($Type.getbasetypes() -notcontains $Relationship.Source.Class) -and  ($type -ne $relationship.source.class)){
-                            $Component.SetAttribute("Path", "`$Context/Path[Relationship='" + ($relationship.GetManagementPack().Name.replace('.','_')) + "!" + $relationship.Name + "' SeedRole='Target']`$")  
+                        if ($Relationship.Alias) {
+                            $component = New-TPComponent -Document $doc -Class $Type -Relationship $Relationship.relationship -Alias $Relationship.Alias
                         }
                         else {
-                         $Component.SetAttribute("Path", "`$Context/Path[Relationship='" + ($relationship.GetManagementPack().Name.replace('.','_')) + "!" + $relationship.Name + "']`$")
+                            $component = New-TPComponent -Document $doc -Class $Type -Relationship $Relationship
                         }
-                        $component.SetAttribute("Alias", $relationship.name.split('.')[$relationship.name.split('.').Length -1])
+                        if ($NestedComponents) {
+                            foreach ($n in $NestedComponents) {
+                                if ($relationship.Alias) {
+                                    $relTarget = $relationship.Relationship
+                                }
+                                else {
+                                    $relTarget = $relationship
+                                }
+                                if ($n.reltarget -eq $relTarget) {
+                                    get-nest -nest $n -parent $component
+                                }
+                            }
+                        }
+
                         $TypeProjection.AppendChild($Component)
                     }
                 $TypeProjections.AppendChild($TypeProjection)
@@ -300,6 +393,21 @@ Function New-SCSMTypeProjection {
 
 }
 
+Function Get-ClassRelationships {
+    param([parameter(mandatory=$true)]$class) 
+    $relationships = New-Object System.Collections.ArrayList
+    $relationships.AddRange($class.GetRelationships())
+    $baseTypes = $class.GetBaseTypes()
+    foreach ($bt in $baseTypes) {
+        if ($bt.Name -ne 'System.Entity') {
+            $relationships.AddRange($bt.GetRelationships())
+        }
+    }
+    $relationships = $relationships | ?{$_.displayname -ne $null} | select displayname, source,target,name
+
+    return $relationships
+}
+
 Function Get-TargetClasses {
     param($control)
     $classWin = Load-Dialog $classForm
@@ -340,7 +448,13 @@ Function Get-TargetClasses {
         }
         $mp = $class.GetManagementPack()
         $relationships = New-Object System.Collections.ArrayList
-        $relationships.AddRange($class.GetRelationships())
+        $classRels = $class.GetRelationships()
+        if ($classRels.count -lt 2) {
+            $relationships.AddRange(@($classRels))
+        }
+        else {
+            $relationships.AddRange($classRels)
+        }
         $baseTypes = $class.GetBaseTypes()
         foreach ($bt in $baseTypes) {
             if ($bt.Name -ne 'System.Entity') {
@@ -449,6 +563,77 @@ Function Check-Version {
     }
 }
 
+Function Load-CustomizeForm {
+    param($SelectedRelgrid)
+    $RelCustom = Load-Dialog -XamlPath $relForm
+    $txtRelName.Text = $SelectedRelgrid.SelectedItem.Name
+    $relationship = Get-SCSMRelationshipClass -Name $txtRelName.Text
+
+    #ok button
+    $btnAddRelationshipC.add_click({
+        #get this grdRelNest
+        foreach ($c in $_.Source.Parent.Children) {
+            if ($c.name -eq 'grdRelNest') {
+                $localGrdRelNest = $c
+            }
+
+            if ($c.name -eq 'txtRelAlias') {
+                $localTxtRelAlias = $c
+            }
+        }
+
+        #Set-Variable -Name athing -Value $_ -Scope global
+        $source = New-Object System.Collections.ArrayList
+        if ($SelectedRelgrid.ItemsSource) {
+            $source.AddRange($SelectedRelgrid.ItemsSource)
+        }
+
+        $thisItem = [pscustomobject]@{
+            DisplayName = $SelectedRelgrid.SelectedItem.DisplayName
+            Name = $SelectedRelgrid.SelectedItem.Name
+            Source = $SelectedRelgrid.SelectedItem.Source
+            Target = $SelectedRelgrid.SelectedItem.Target
+            Alias = $localTxtRelAlias.Text
+            Components = $localGrdRelNest.Items 
+        }
+
+        $source.Remove($SelectedRelgrid.SelectedItem)
+        $source.Add($thisItem)
+        $SelectedRelgrid.ItemsSource = $source
+        Set-Variable -Scope global -Name gridthing -Value $_
+        $_.source.parent.parent.Close()
+        
+
+    })
+
+    #add button
+    $btnRelFormAdd.add_click({
+        $potentialNest = $relationship.Target.Class.GetRelationshipsWhereSource() | select displayname, name, target, source
+        $compAddWin = Load-Dialog -XamlPath $compAddForm
+            $grdComponentAdd.itemssource = $potentialNest 
+            $btnComponentSelect.add_click({
+                $source = New-Object System.Collections.ArrayList
+                if ($grdRelNest.ItemsSource) {
+                    $source.AddRange($grdRelNest.ItemsSource)
+                }
+                $source.Add($grdComponentAdd.SelectedItem)
+                $grdRelNest.ItemsSource = $source
+               
+            })
+        $compAddWin.showdialog()
+    })
+
+
+    #customize button
+    $btnRelFormCustomize.add_click({
+        Load-CustomizeForm -SelectedRelgrid $grdRelNest
+    })
+    
+
+    #relForm UI
+    $RelCustom.showdialog()
+}
+
 #endregion
 
 $win = Load-Dialog $Form
@@ -464,12 +649,11 @@ $btnSaveBrowse.add_click({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
 
-
 $btnClassBrowse.add_click({
     Get-TargetClasses -control $txtClass
    $grdSelectedRels.ItemsSource = @()
+   $txtRelfilter.IsEnabled = $true
 })
-
 
 $chkSeal.add_click({
     $txtCompany.IsEnabled = $chkSeal.IsChecked
@@ -483,65 +667,66 @@ $txtCompany.add_keyup({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
 
-
 $btnRelsAdd.add_click({
-    $source = New-Object System.Collections.ArrayList
-    if ($grdSelectedRels.ItemsSource) {
-        $source.AddRange($grdSelectedRels.ItemsSource)  
+    if ($grdRels.SelectedItem) {
+        $source = New-Object System.Collections.ArrayList
+        if ($grdSelectedRels.ItemsSource) {
+            $source.AddRange($grdSelectedRels.ItemsSource)  
+        }
+        if (!($source.Contains($grdRels.SelectedItem))) {
+            $source.Add($grdRels.SelectedItem)
+            $grdSelectedRels.ItemsSource = $source
+            $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+        }
+        else {
+            [System.Windows.MessageBox]::show($grdRels.SelectedItem.DisplayName + " has already been selected")
+        }
     }
-    $source.Add($grdRels.SelectedItem)
-    $grdSelectedRels.ItemsSource = $source
-    $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+    
 })
 
 $btnRelsRemove.add_click({
-    $gridItemsSource = New-Object System.Collections.ArrayList
-    $gridItemsSource.AddRange($grdSelectedRels.ItemsSource)
-    $gridItemsSource.Remove($grdSelectedRels.SelectedItem)
-    $grdSelectedRels.ItemsSource = $gridItemsSource
-    $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+    if ($grdSelectedRels.ItemsSource) {
+        $gridItemsSource = New-Object System.Collections.ArrayList
+        $gridItemsSource.AddRange($grdSelectedRels.ItemsSource)
+        $gridItemsSource.Remove($grdSelectedRels.SelectedItem)
+        $grdSelectedRels.ItemsSource = $gridItemsSource
+        $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+    }
 })
 
 $btnRelsCustomize.add_click({
-    $RelCustom = Load-Dialog -XamlPath $relForm
-    $txtRelName.Text = $grdSelectedRels.SelectedItem.Name
-    $relationship = Get-SCSMRelationshipClass -Name $txtRelName.Text
-    $btnAddRelationshipC.add_click({
-        $source = New-Object System.Collections.ArrayList
-        if ($grdSelectedRels.ItemsSource) {
-            $source.AddRange($grdSelectedRels.ItemsSource)
-        }
-        $thisItem = [pscustomobject]@{
-            DisplayName = $grdSelectedRels.SelectedItem.DisplayName
-            Name = $grdSelectedRels.SelectedItem.Name
-            Source = $grdSelectedRels.SelectedItem.Source
-            Target = $grdSelectedRels.SelectedItem.Target 
-            Alias = $txtRelAlias.Text
-        }
-        $source.Remove($grdSelectedRels.SelectedItem)
-        $source.Add($thisItem)
-        $grdSelectedRels.ItemsSource = $source
-
-    })
-    $btnRelFormAdd.add_click({
-        $potentialNest = $relationship.Target.Class.GetRelationshipsWhereSource() | select displayname, name, target, source
-        $compAddWin = Load-Dialog -XamlPath $compAddForm
-            $grdComponentAdd.itemssource = $potentialNest 
-            $btnComponentSelect.add_click({
-                $source = New-Object System.Collections.ArrayList
-                if ($grdRelNest.ItemsSource) {
-                    $source.AddRange($grdRelNest.ItemsSource)
-                }
-                $source.Add($grdComponentAdd.SelectedItem)
-                $grdRelNest.ItemsSource = $source
-                #$grdRelNest.Items.add($grdComponentAdd.SelectedItem.Name)
-               
-            })
-        $compAddWin.showdialog()
-    })
-    
-    $RelCustom.showdialog()
+    Load-CustomizeForm -SelectedRelgrid $grdSelectedRels
 })
+
+$txtRelfilter.add_keyup({
+    if ($txtClass.Text -ne '') {
+        if ($txtRelfilter.text -ne "") {
+            $grdSource = $grdRels.Items | ?{$_.DisplayName -like ("*" + $txtRelfilter.text + "*")}
+            if ($grdSource.Count -gt 1) {
+                $grdRels.ItemsSource = $grdSource
+            }
+            else {
+                $uniSource = @($grdSource)
+                $grdRels.ItemsSource = $uniSource
+                
+            }
+        }
+        else {
+            if ($remoteComputer) {
+                $class = Get-SCSMClass -Name $txtClass.Text -ComputerName $remoteComputer
+            }
+            else {
+                $class = Get-SCSMClass -Name $txtClass.Text
+            }
+            $grdRels.ItemsSource = Get-ClassRelationships -class $class
+        }
+    }
+})
+
+
+
+
 
 $txtSavePath.add_TextChanged({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
@@ -550,7 +735,6 @@ $txtSavePath.add_TextChanged({
 $txtProjectionName.add_TextChanged({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
-
 
 $txtComputer.add_LostFocus({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
@@ -563,7 +747,6 @@ $btnKeyBrowse.add_click({
 $txtMPVersion.add_textchanged({
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
 })
-
 
 $btnBuild.add_click({
     $selectedrelationships = @()
@@ -612,6 +795,7 @@ $btnBuild.add_click({
     $grdRels.ItemsSource = @()
     $grdSelectedRels.ItemsSource = @()
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
+    $txtRelfilter.IsEnabled = $false
    
 })
 
