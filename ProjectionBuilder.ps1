@@ -43,7 +43,6 @@ $form = @"
                     <Label Content="Filter:" HorizontalAlignment="Left" Margin="371,171,0,0" VerticalAlignment="Top"/>
                     <TextBox Name="txtRelFilter" HorizontalAlignment="Left" Height="23" Margin="414,171,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="120" IsEnabled="false"/>
                     <Button Name="btnRelsCustomize" Content="Customize" HorizontalAlignment="Left" Margin="25,443,0,0" VerticalAlignment="Top" Width="75"/>
-
                 </Grid>
             </TabItem>
 
@@ -69,38 +68,20 @@ $classForm = @"
 </Window>
 "@
 
-$compAddForm = @"
-<Window 
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        Title="Select a Relationship" Height="258.37" Width="376.631">
-    <Grid Background="#FFE5E5E5">
-        <Button Name="btnComponentSelect" Content="Select" HorizontalAlignment="Left" Margin="129,170,0,0" VerticalAlignment="Top" Width="110" Height="25"/>
-        <DataGrid Name="grdComponentAdd" HorizontalAlignment="Left" Height="126" Margin="23,21,0,0" VerticalAlignment="Top" Width="329" CanUserAddRows="False"/>
-    </Grid>
-</Window>
-"@
-
 $relForm = @"
 <Window 
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        Title="Relationship" MaxHeight="615" MaxWidth="739" Height="261.133" Width="622.8" Background="#FFE5E5E5" >
+        Title="Relationship" MaxHeight="615" MaxWidth="739" Height="231.133" Width="523.2" Background="#FFE5E5E5" >
     <Grid>
         <TextBox Name="txtRelName" HorizontalAlignment="Left" Height="23" Margin="136,35,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="267" IsEnabled="False" />
         <Label Content="Relationship Name:" HorizontalAlignment="Left" Margin="17,32,0,0" VerticalAlignment="Top" Width="114"/>
         <TextBox Name="txtRelAlias" HorizontalAlignment="Left" Height="23" Margin="136,66,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="267"/>
         <Label Content="Relationship Alias:" HorizontalAlignment="Left" Margin="17,63,0,0" VerticalAlignment="Top" Width="114"/>
-        <Button Name="btnAddRelationshipC" Content="OK" HorizontalAlignment="Left" Margin="486,169,0,0" VerticalAlignment="Top" Width="110" Height="43"/>
-        <DataGrid Name="grdRelNest" HorizontalAlignment="Left" Height="89" Margin="136,123,0,0" VerticalAlignment="Top" Width="334" CanUserAddRows="False"/>
-        <Label Content="Nested Components:" HorizontalAlignment="Left" Margin="17,88,0,0" VerticalAlignment="Top" Width="128"/>
-        <Button Name="btnRelFormAdd" Content="Add" HorizontalAlignment="Left" Margin="56,135,0,0" VerticalAlignment="Top" Width="75"/>
-        <Button Name="btnRelFormRemove" Content="Remove" HorizontalAlignment="Left" Margin="56,159,0,0" VerticalAlignment="Top" Width="75"/>
-        <Button Name="btnRelFormCustomize" Content="Customize" HorizontalAlignment="Left" Margin="56,192,0,0" VerticalAlignment="Top" Width="75"/>
+        <CheckBox Name="chkRelTarget" Content="Target" HorizontalAlignment="Left" Margin="418,43,0,0" VerticalAlignment="Top"/>
+        <Button Name="btnAddRelationshipC" Content="Add" HorizontalAlignment="Left" Margin="206,122,0,0" VerticalAlignment="Top" Width="110" Height="43"/>
 
     </Grid>
 </Window>
@@ -694,6 +675,7 @@ $btnRelsRemove.add_click({
         $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
     }
 })
+
 
 $btnRelsCustomize.add_click({
     Load-CustomizeForm -SelectedRelgrid $grdSelectedRels
