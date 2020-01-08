@@ -196,9 +196,10 @@ Function New-SCSMTypeProjection {
     function Get-Nest {
         param($nest, $parent) 
         Write-Host "Get-Nest"
+        Write-Host $nest.tostring()
         Write-Host "Parent: $($parent)"
         foreach ($c in $nest.Components) {
-            if ($c.Components) {
+            if ($c.reltarget) {
                 $rel = Get-SCSMRelationshipClass -Name $c.reltarget
                 $subCom = (New-TPComponent -Document $doc -Class $rel.source.class -Relationship $rel)
                 get-nest -nest $c -parent $subCom
@@ -214,6 +215,7 @@ Function New-SCSMTypeProjection {
 
     function Get-NestReferences {
         param($nest,$ReferencesToInclude)
+        write-host 'get-nestreferences'
         $newRefs = $ReferencesToInclude
         foreach ($n in $nest.components) {
             $rel = Get-SCSMRelationshipClass -Name $n.name
@@ -222,11 +224,12 @@ Function New-SCSMTypeProjection {
                 $newRefs.add($relMP)
             }
             foreach ($c in $n.Components) {
+                $c | Out-GridView
                 if ($c.components) {
                     $newRefs = Get-NestReferences -nest $c -ReferencesToInclude $newRefs
                 }
                 else {
-                    if ($c.Alias) {$relMP = $c.Relationship.GetManagementPack()} else {$relMP = $c.GetManagementPack()}
+                    if ($c.Alias) {$relMP = (Get-SCSMRelationshipClass -name $c.Relationship.name).GetManagementPack()} else {$relMP = $c.GetManagementPack()}
                     if (!($newRefs.contains($relMP))) {
                         $newRefs.add($relMP)
                     }
@@ -330,10 +333,10 @@ Function New-SCSMTypeProjection {
                         if ($NestedComponents) {
                             foreach ($n in $NestedComponents) {
                                 if ($relationship.Alias) {
-                                    $relTarget = $relationship.Relationship
+                                    $relTarget = $relationship.Relationship.name
                                 }
                                 else {
-                                    $relTarget = $relationship
+                                    $relTarget = $relationship.name
                                 }
                                 if ($n.reltarget -eq $relTarget) {
                                     get-nest -nest $n -parent $component
@@ -394,9 +397,16 @@ Function New-SCSMTypeProjection {
 }
 
 Function Get-ClassRelationships {
-    param([parameter(mandatory=$true)]$class) 
+    param([parameter(mandatory=$true)]$class)
+    write-host 'Get-ClassRelationships' 
     $relationships = New-Object System.Collections.ArrayList
-    $relationships.AddRange($class.GetRelationships())
+    $classRelationships = $class.GetRelationships()
+    if ($classRelationships.count -gt 1) {
+        $relationships.AddRange($classRelationships)
+    }
+    else {
+        $relationships.Add($classRelationships)
+    }
     $baseTypes = $class.GetBaseTypes()
     foreach ($bt in $baseTypes) {
         if ($bt.Name -ne 'System.Entity') {
@@ -546,7 +556,6 @@ Function Get-Validation {
     return $retValue
     
 }
-
 
 Function Check-Version {
     [system.version]$b = $null
@@ -750,18 +759,73 @@ $txtMPVersion.add_textchanged({
 
 $btnBuild.add_click({
     $selectedrelationships = @()
+    $nestedComponents = @()
     if ($remoteComputer) {
-        $grdSelectedRels.ItemsSource | % {if ($selectedrelationships -notcontains (Get-SCSMRelationshipClass -Name $_.name -ComputerName $remoteComputer)) {$selectedrelationships += Get-SCSMRelationshipClass -Name $_.name -ComputerName $remoteComputer} }
+        $grdSelectedRels.ItemsSource | % {
+            if (!([string]::IsNullOrEmpty($_.alias))) {
+                $thisRelationship = @{
+                    Alias = $_.Alias
+                    Relationship = Get-SCSMRelationshipClass -Name $_.name -ComputerName $remoteComputer
+                }
+            }
+            else {
+                $thisRelationship = Get-SCSMRelationshipClass -Name $_.name -ComputerName $remoteComputer
+            } 
+            if ($selectedrelationships -notcontains $thisRelationship) {
+                $selectedrelationships += $thisRelationship
+            }
+            if ($_.components) {
+                $thisComponent =  @{
+                    RelTarget = $_.name
+                    Components = $_.components
+                }
+                if ($nestedComponents -notcontains $thisComponent) {
+                    $nestedComponents += $thisComponent
+                }
+            }
+        }
     }
+
     else {
-        $grdSelectedRels.ItemsSource | % {if ($selectedrelationships -notcontains (Get-SCSMRelationshipClass -Name $_.name )) {$selectedrelationships += Get-SCSMRelationshipClass -Name $_.name } }
+        $grdSelectedRels.ItemsSource | % {
+            if (!([string]::IsNullOrEmpty($_.alias))) {
+                $thisRelationship = [pscustomobject]@{
+                    Alias = $_.Alias
+                    Relationship = Get-SCSMRelationshipClass -Name $_.name 
+                }
+            }
+            else {
+                $thisRelationship = Get-SCSMRelationshipClass -Name $_.name 
+            } 
+            if ($selectedrelationships -notcontains $thisRelationship) {
+                $selectedrelationships += $thisRelationship
+            }
+            if ($_.components) {
+                $thisComponent = [pscustomobject]@{
+                    RelTarget = $_.name
+                    Components = $_.components
+                }
+                if ($nestedComponents -notcontains $thisComponent) {
+                    $nestedComponents += $thisComponent
+                }
+            }
+        }
     }
+
     if ($chkSeal.IsChecked -and $chkImport.IsChecked) {
         if ($remoteComputer) {
-            New-SCSMTypeProjection -Name $txtProjectionName.text -Type (Get-SCSMClass -Name ($txtClass.text + "$") -ComputerName $remoteComputer) -Relationships $selectedrelationships -savePath $txtSavePath.Text -DisplayName $txtProjDisplay.text -MPName $txtMPName.Text -MPVersion $txtMPVersion.Text -Seal -KeyPath $txtKeyPath.Text -Import -CompanyName $txtCompany.Text -ComputerName $txtComputer.Text
+            #New-SCSMTypeProjection -Name $txtProjectionName.text -Type (Get-SCSMClass -Name ($txtClass.text + "$") -ComputerName $remoteComputer) -Relationships $selectedrelationships -savePath $txtSavePath.Text -DisplayName $txtProjDisplay.text -MPName $txtMPName.Text -MPVersion $txtMPVersion.Text -Seal -KeyPath $txtKeyPath.Text -Import -CompanyName $txtCompany.Text -ComputerName $txtComputer.Text
         }
         else {
-            New-SCSMTypeProjection -Name $txtProjectionName.text -Type (Get-SCSMClass -Name ($txtClass.text + "$")) -Relationships $selectedrelationships -savePath $txtSavePath.Text -DisplayName $txtProjDisplay.text -MPName $txtMPName.Text -MPVersion $txtMPVersion.Text -Seal -KeyPath $txtKeyPath.Text -Import -CompanyName $txtCompany.Text -ComputerName $txtComputer.Text
+            #New-SCSMTypeProjection -Name $txtProjectionName.text -Type (Get-SCSMClass -Name ($txtClass.text + "$")) -Relationships $selectedrelationships -savePath $txtSavePath.Text 
+            #-DisplayName $txtProjDisplay.text -MPName $txtMPName.Text -MPVersion $txtMPVersion.Text -Seal -KeyPath $txtKeyPath.Text -Import -CompanyName $txtCompany.Text -ComputerName $txtComputer.Text
+            $global:outputObject = @{
+                Name = $txtProjectionName.Text
+                Type = Get-SCSMClass -name ($txtClass.text + "$")
+                Relationships = $selectedRelationships
+                NestedComponents = $nestedComponents
+
+            }
         }
     }
     else {
@@ -783,10 +847,17 @@ $btnBuild.add_click({
         }
         else {
             if ($remoteComputer) {
-                New-SCSMTypeProjection -Name $txtProjectionName.text -Type (Get-SCSMClass -Name ($txtClass.text + "$") -ComputerName $remoteComputer) -Relationships $selectedrelationships -savePath $txtSavePath.Text -DisplayName $txtProjDisplay.text -MPName $txtMPName.Text -MPVersion $txtMPVersion.Text
+                New-SCSMTypeProjection -Name $txtProjectionName.text -Type (Get-SCSMClass -Name ($txtClass.text + "$") -ComputerName $remoteComputer) -Relationships $selectedrelationships -savePath $txtSavePath.Text -DisplayName $txtProjDisplay.text -MPName $txtMPName.Text -MPVersion $txtMPVersion.Text -NestedComponents $nestedComponents
             }
             else {
-                New-SCSMTypeProjection -Name $txtProjectionName.text -Type (Get-SCSMClass -Name ($txtClass.text + "$")) -Relationships $selectedrelationships -savePath $txtSavePath.Text -DisplayName $txtProjDisplay.text -MPName $txtMPName.Text -MPVersion $txtMPVersion.Text
+                #New-SCSMTypeProjection -Name $txtProjectionName.text -Type (Get-SCSMClass -Name ($txtClass.text + "$")) -Relationships $selectedrelationships -savePath $txtSavePath.Text -DisplayName $txtProjDisplay.text -MPName $txtMPName.Text -MPVersion $txtMPVersion.Text
+                $global:outputObject = [pscustomobject]@{
+                    Name = $txtProjectionName.Text
+                    Type = Get-SCSMClass -name ($txtClass.text + "$")
+                    Relationships = $selectedRelationships
+                    NestedComponents = $nestedComponents
+
+                }
             }
         }
     }
@@ -795,7 +866,6 @@ $btnBuild.add_click({
     $grdRels.ItemsSource = @()
     $grdSelectedRels.ItemsSource = @()
     $btnBuild.IsEnabled = Get-Validation -ValidateSeal $chkSeal.IsChecked -ValidateImport $chkImport.IsChecked
-    $txtRelfilter.IsEnabled = $false
    
 })
 
