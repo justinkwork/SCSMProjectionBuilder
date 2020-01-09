@@ -191,16 +191,14 @@ Function New-SCSMTypeProjection {
     [Parameter(ParameterSetName='Import',Mandatory=$true)][Parameter(ParameterSetName='Both',Mandatory=$true)][string]$ComputerName
     )
 
-
-
     function Get-Nest {
         param($nest, $parent) 
         Write-Host "Get-Nest"
         Write-Host $nest.tostring()
         Write-Host "Parent: $($parent)"
         foreach ($c in $nest.Components) {
-            if ($c.reltarget) {
-                $rel = Get-SCSMRelationshipClass -Name $c.reltarget
+            if ($c.Components) {
+                $rel = Get-SCSMRelationshipClass -Name $c.Name
                 $subCom = (New-TPComponent -Document $doc -Class $rel.source.class -Relationship $rel)
                 get-nest -nest $c -parent $subCom
             }
