@@ -171,8 +171,6 @@ Function New-TPComponent {
     return $Child                
 }
 
-$processRelationships = New-Object System.Collections.ArrayList
-$processNests = New-Object System.Collections.ArrayList
 Function New-SCSMTypeProjection {
     [cmdletbinding(
         DefaultParameterSetName='Other'
@@ -195,7 +193,6 @@ Function New-SCSMTypeProjection {
 
     function Get-Nest {
         param($nest, $parent) 
-        Write-Host "Get-Nest"
         $processNests.add($nest)
         foreach ($c in $nest.Components) {
             if ($c.Components) {
@@ -214,7 +211,6 @@ Function New-SCSMTypeProjection {
 
     function Get-NestReferences {
         param($nest,$ReferencesToInclude)
-        write-host 'get-nestreferences'
         foreach ($n in $nest.components) {
             $rel = Get-SCSMRelationshipClass -Name $n.name
             $relMP = $rel.GetManagementPack()
@@ -257,11 +253,9 @@ Function New-SCSMTypeProjection {
         }
         
     }
-    $global:preReferenceCheck = $ReferencesToInclude
     if ($NestedComponents) {
         Get-NestReferences -nest $NestedComponents -ReferencesToInclude $ReferencesToInclude
     }
-    $ReferencesToInclude | Out-GridView
     [xml]$doc = New-Object System.Xml.XmlDocument
     $dec = $Doc.CreateXmlDeclaration("1.0","UTF-8",$null)
     $doc.AppendChild($dec)
@@ -580,7 +574,6 @@ Function Load-CustomizeForm {
             }
         }
 
-        #Set-Variable -Name athing -Value $_ -Scope global
         $source = New-Object System.Collections.ArrayList
         if ($SelectedRelgrid.ItemsSource) {
             $source.AddRange($SelectedRelgrid.ItemsSource)
@@ -598,7 +591,6 @@ Function Load-CustomizeForm {
         $source.Remove($SelectedRelgrid.SelectedItem)
         $source.Add($thisItem)
         $SelectedRelgrid.ItemsSource = $source
-        Set-Variable -Scope global -Name gridthing -Value $_
         $_.source.parent.parent.Close()
         
 
@@ -798,8 +790,7 @@ $btnBuild.add_click({
                 }
             }
         }
-    $global:preTPNest = $nestedComponents
-    $global:preTPREl = $selectedrelationships
+
     }
 
     if ($chkSeal.IsChecked -and $chkImport.IsChecked) {
