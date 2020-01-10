@@ -124,7 +124,6 @@ $rcForm = @"
 </Window>
 "@
 
-
 #region Function defintions
 Function Load-Dialog {
     Param(
@@ -326,7 +325,7 @@ Function New-SCSMTypeProjection {
                                 }
                             }
                         }
-
+                        
                         $TypeProjection.AppendChild($Component)
                     }
                 $TypeProjections.AppendChild($TypeProjection)
@@ -599,9 +598,13 @@ Function Load-CustomizeForm {
     #add button
     $btnRelFormAdd.add_click({
         $potentialNest = $relationship.Target.Class.GetRelationshipsWhereSource() | select displayname, name, target, source
+        if ($potentialNest.count -le 1) {
+            $potentialNest = @($potentialNest)
+        }
         $compAddWin = Load-Dialog -XamlPath $compAddForm
             $grdComponentAdd.itemssource = $potentialNest 
             $btnComponentSelect.add_click({
+                
                 $source = New-Object System.Collections.ArrayList
                 if ($grdRelNest.ItemsSource) {
                     $source.AddRange($grdRelNest.ItemsSource)
@@ -713,9 +716,6 @@ $txtRelfilter.add_keyup({
         }
     }
 })
-
-
-
 
 
 $txtSavePath.add_TextChanged({
